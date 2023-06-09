@@ -4,6 +4,7 @@
 #include <numeric>
 #include <thread>
 #include <random>
+#include <future>
 using namespace std;
 
 void sumar_rango(vector<int>& vdata, int& resultado, int start, int stop) {
@@ -65,6 +66,28 @@ auto acumular_paralelo(vector<int>::iterator start,
     return accumulate(begin(vr), end(vr), 0);
 }
 
+auto acumular_paralelo_future(vector<int>::iterator start,
+                       vector<int>::iterator stop) {
+    int nf = static_cast<int>(thread::hardware_concurrency());
+    int rango = static_cast<int>(distance(start, stop) / nf);
+    // 1. Crear el vector de futures
+    vector<future<int>> vf(nf);
+    // 2. Asignar una tarea o funcion a los futures
+    for (int j = 0; j < nf; ++j) {
+        auto it_start = next(start, j * rango);
+        auto it_stop = next(start, (j + 1)* rango);
+        vf[j] = async(
+                [it_start, it_stop]{
+                    return accumulate(it_start, it_stop, 0);
+                });
+    }
+    return accumulate(begin(vf), end(vf), 0,
+                      [](auto sum, auto& item){
+        sum += item.get();
+        return sum;
+    });
+}
+
 void ejemplo_2() {
     vector<int> v(1000000 * thread::hardware_concurrency());
     random_device rd;
@@ -85,8 +108,14 @@ void ejemplo_2() {
     auto total_sh = accumulate(begin(v), end(v), 0);
     stop = high_resolution_clock::now();
     cout << "Total S/H: " <<  total_sh  << " "
-        << duration_cast<microseconds>(stop - start).count()
-        << endl;
+         << duration_cast<microseconds>(stop - start).count()
+         << endl;
+    start = high_resolution_clock::now();
+    auto total_ca = acumular_paralelo_future(begin(v), end(v));
+    stop = high_resolution_clock::now();
+    cout << "Total C/A: " <<  total_ca  << " "
+         << duration_cast<microseconds>(stop - start).count()
+         << endl;
 }
 
 int main() {
